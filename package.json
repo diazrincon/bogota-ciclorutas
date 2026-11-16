@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "data": "python3 scripts/gpkg_to_geojson.py"
+    "data": "python3 scripts/gpkg_to_geojson.py && python3 scripts/descargar_redes.py && python3 scripts/descargar_mdt.py && python3 scripts/construir_red.py"
   },
   "dependencies": {
     "maplibre-gl": "^5.0.0"
