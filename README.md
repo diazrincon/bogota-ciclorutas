@@ -2,6 +2,8 @@
 
 Visor web de las ciclorrutas de Bogotá sobre el relieve de la ciudad, con cálculo de rutas en bicicleta y perfil de elevación. Usa datos abiertos de IDECA y funciona entero en el navegador, sin servidor propio.
 
+**[Abrir el visor en línea](https://diazrincon.github.io/bogota-ciclorutas/)** · [Descargar el ejecutable portable](https://github.com/diazrincon/bogota-ciclorutas/releases/latest)
+
 ![Ruta calculada sobre el relieve, con su perfil de elevación](docs/captura.png)
 
 ## Qué hace
@@ -14,7 +16,11 @@ Visor web de las ciclorrutas de Bogotá sobre el relieve de la ciudad, con cálc
 
 ## Cómo usarlo
 
-Necesitas Node.js 20 o superior.
+Hay tres formas:
+
+- **En línea**: <https://diazrincon.github.io/bogota-ciclorutas/>.
+- **Ejecutable portable**: en [Releases](https://github.com/diazrincon/bogota-ciclorutas/releases/latest) hay un archivo para Windows, macOS y Linux. Al abrirlo levanta un servidor local y muestra el visor en el navegador, sin instalar nada. Necesita internet para el relieve y los mapas base.
+- **Desde el código**, con Node.js 20 o superior:
 
 ```bash
 npm install
@@ -28,6 +34,11 @@ Abre la dirección que imprime Vite (por defecto `http://localhost:5173`).
 - Los botones de arriba a la derecha llevan a la vista 2D de toda la red y a la vista isométrica.
 
 `npm run build` genera el sitio estático en `dist/`.
+
+## Publicación
+
+- Cada cambio en `main` se despliega en GitHub Pages (`.github/workflows/pages.yml`).
+- Cada tag `vX.Y.Z` crea un release con los ejecutables portables (`.github/workflows/release.yml`). El ejecutable es un servidor mínimo en Go (`portable/`) con el sitio compilado dentro.
 
 ## Datos
 
