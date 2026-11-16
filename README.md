@@ -2,7 +2,7 @@
 
 Visor web de las ciclorrutas de Bogotá sobre el relieve de la ciudad, con cálculo de rutas en bicicleta y perfil de elevación. Usa datos abiertos de IDECA y funciona entero en el navegador, sin servidor propio.
 
-**[Abrir el visor en línea](https://diazrincon.github.io/bogota-ciclorutas/)** · [Descargar el ejecutable portable](https://github.com/diazrincon/bogota-ciclorutas/releases/latest)
+**[Abrir el visor en línea](https://diazrincon.github.io/bogota-ciclorutas/)** · [Descargar la aplicación de escritorio](https://github.com/diazrincon/bogota-ciclorutas/releases/latest)
 
 ![Ruta calculada sobre el relieve, con su perfil de elevación](docs/captura.png)
 
@@ -19,7 +19,7 @@ Visor web de las ciclorrutas de Bogotá sobre el relieve de la ciudad, con cálc
 Hay tres formas:
 
 - **En línea**: <https://diazrincon.github.io/bogota-ciclorutas/>.
-- **Ejecutable portable**: en [Releases](https://github.com/diazrincon/bogota-ciclorutas/releases/latest) hay un archivo para Windows, macOS y Linux. Al abrirlo levanta un servidor local y muestra el visor en el navegador, sin instalar nada. Necesita internet para el relieve y los mapas base.
+- **Aplicación de escritorio**: en [Releases](https://github.com/diazrincon/bogota-ciclorutas/releases/latest) hay un archivo para Windows, macOS y Linux. Al abrirlo, el visor aparece en su propia ventana, sin navegador ni instalación adicional. Necesita internet para el relieve y los mapas base.
 - **Desde el código**, con Node.js 20 o superior:
 
 ```bash
@@ -38,7 +38,11 @@ Abre la dirección que imprime Vite (por defecto `http://localhost:5173`).
 ## Publicación
 
 - Cada cambio en `main` se despliega en GitHub Pages (`.github/workflows/pages.yml`).
-- Cada tag `vX.Y.Z` crea un release con los ejecutables portables (`.github/workflows/release.yml`). El ejecutable es un servidor mínimo en Go (`portable/`) con el sitio compilado dentro.
+- Cada tag `vX.Y.Z` crea un release con la aplicación de escritorio para cada sistema (`.github/workflows/release.yml`). Es el mismo sitio dentro de una ventana de [Electron](https://www.electronjs.org/) (`electron/main.cjs`).
+
+Para probar la aplicación de escritorio en tu máquina: `npm run app`. Para empaquetarla: `npm run app:build` (deja el resultado en `release/`).
+
+El nombre interno del producto va sin tilde (`Ciclorrutas de Bogota`) a propósito: con tilde, Electron 45 no encuentra sus procesos auxiliares en macOS y la aplicación se cierra al abrir.
 
 ## Datos
 
@@ -88,6 +92,7 @@ El código está bajo licencia [MIT](LICENSE). Los datos y recursos de terceros 
 | Relieve fuera de Bogotá | [Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Varias fuentes abiertas, con atribución |
 | Tipografía Open Sans Semibold (glifos en `public/fonts/`) | Google Fonts, vía las teselas de demostración de MapLibre | Apache 2.0 |
 | MapLibre GL JS | [maplibre.org](https://maplibre.org/) | BSD de 3 cláusulas |
+| Electron (aplicación de escritorio) | [electronjs.org](https://www.electronjs.org/) | MIT |
 
 Este proyecto no está afiliado a IDECA ni a ninguna entidad del Distrito.
 
