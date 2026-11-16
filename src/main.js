@@ -2,18 +2,21 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import AREA from './data/ciclorrutas-bbox.json';
+import { BASE_PROTOCOL, BASE_TILE_SIZE, registerBaseProtocol } from './base-protocol.js';
 import { DEM_PROTOCOL, demStatus, registerDemProtocol } from './dem-protocol.js';
+import { LABEL_LAYERS, labelLayers, labelSources, setLabelTheme } from './etiquetas.js';
 import { ProfilePanel } from './perfil.js';
 import { loadNetwork, nearestVertex } from './red.js';
 import { findRoute } from './ruta.js';
 
 registerDemProtocol(maplibregl);
+registerBaseProtocol(maplibregl);
 
-const IDECA_MAPS = 'https://serviciosgis.catastrobogota.gov.co/arcgis/rest/services/Mapa_Referencia';
+// Servicio de IDECA de cada mapa base y el color de texto que le va a las etiquetas.
 const BASEMAPS = {
-  gris: 'mapa_base_gris',
-  hibrido: 'mapa_hibrido',
-  oscuro: 'mapa_base_oscuro_3857',
+  gris: { service: 'mapa_base_gris', labels: 'claro' },
+  hibrido: { service: 'mapa_hibrido', labels: 'oscuro' },
+  oscuro: { service: 'mapa_base_oscuro_3857', labels: 'oscuro' },
 };
 const CICLORRUTA_COLOR = '#ff2d6f';
 const ROUTE_COLOR = '#1463ff';
@@ -32,15 +35,16 @@ const demSource = {
 
 const style = {
   version: 8,
+  glyphs: `${new URL(import.meta.env.BASE_URL, window.location.href).href}fonts/{fontstack}/{range}.pbf`,
   sources: {
     ...Object.fromEntries(
-      Object.entries(BASEMAPS).map(([id, service]) => [
+      Object.entries(BASEMAPS).map(([id, { service }]) => [
         `base-${id}`,
         {
           type: 'raster',
-          tiles: [`${IDECA_MAPS}/${service}/MapServer/tile/{z}/{y}/{x}`],
-          tileSize: 256,
-          maxzoom: 19,
+          tiles: [`${BASE_PROTOCOL}://${service}/{z}/{x}/{y}`],
+          tileSize: BASE_TILE_SIZE,
+          maxzoom: 18,
           attribution: 'Mapa de referencia © IDECA',
         },
       ]),
@@ -55,6 +59,7 @@ const style = {
       attribution: 'Ciclorrutas © IDU – IDECA',
     },
     ruta: { type: 'geojson', data: EMPTY_LINE },
+    ...labelSources(import.meta.env.BASE_URL),
   },
   layers: [
     { id: 'fondo', type: 'background', paint: { 'background-color': '#cfd8dc' } },
@@ -106,6 +111,7 @@ const style = {
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: { 'line-color': ROUTE_COLOR, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3.5, 16, 7] },
     },
+    ...labelLayers(),
   ],
   terrain: { source: 'terreno', exaggeration: 1.5 },
   sky: {
@@ -362,6 +368,27 @@ map.on('sourcedata', (event) => {
   if (event.sourceId === 'terreno') refreshMarkers();
 });
 
+// Algo parecido pasa con los nombres de las vías. MapLibre los oculta donde el relieve
+// los tapa, comparando contra una imagen de profundidad del terreno que solo rehace
+// cuando la cámara cambia. Si el relieve termina de cargar después del último movimiento,
+// esa imagen queda vieja y, con la cámara inclinada, los nombres desaparecen. Al quedar
+// el mapa en reposo se marca como vieja y se pide un cuadro más (uno solo, para no
+// encadenar reposos). `terrainFacilitator` es interno de MapLibre 5: si cambia de nombre
+// esto deja de hacer efecto, sin romper nada.
+let depthRefreshed = false;
+map.on('idle', () => {
+  if (depthRefreshed) return;
+  depthRefreshed = true;
+  const facilitator = map.painter?.terrainFacilitator;
+  if (facilitator) facilitator.depthDirty = true;
+  map.triggerRepaint();
+});
+for (const type of ['move', 'sourcedata']) {
+  map.on(type, () => {
+    depthRefreshed = false;
+  });
+}
+
 for (const which of ['origin', 'destination']) {
   markers[which].on('dragend', () => {
     setPoint(which, markers[which].getLngLat());
@@ -393,6 +420,7 @@ for (const input of document.querySelectorAll('input[name="basemap"]')) {
     for (const id of Object.keys(BASEMAPS)) {
       map.setLayoutProperty(`base-${id}`, 'visibility', id === input.value ? 'visible' : 'none');
     }
+    setLabelTheme(map, BASEMAPS[input.value].labels);
   });
 }
 
@@ -408,6 +436,12 @@ document.getElementById('toggle-ciclorrutas').addEventListener('change', (event)
   const visibility = event.target.checked ? 'visible' : 'none';
   map.setLayoutProperty('ciclorrutas-relleno', 'visibility', visibility);
   map.setLayoutProperty('ciclorrutas-contorno', 'visibility', visibility);
+});
+
+document.getElementById('toggle-labels').addEventListener('change', (event) => {
+  for (const id of LABEL_LAYERS) {
+    map.setLayoutProperty(id, 'visibility', event.target.checked ? 'visible' : 'none');
+  }
 });
 
 document.getElementById('toggle-hillshade').addEventListener('change', (event) => {

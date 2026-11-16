@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Descarga de IDECA las capas necesarias para calcular rutas.
+"""Descarga de IDECA las capas necesarias para calcular rutas y rotular el mapa.
 
 Guarda en data/raw/ (no versionado):
   - red_biciusuarios.geojson  ejes de la infraestructura para bicicletas
   - malla_vial.geojson        ejes de las vías (solo dentro del recuadro de las ciclorrutas)
   - puentes.geojson           polígonos de puentes (para corregir la elevación)
+  - localidades.geojson       polígonos de las localidades (para sus etiquetas)
   - dominios.json             leyendas de los códigos de las capas
 
 Uso:
@@ -31,6 +32,7 @@ LAYERS = {
     "red_biciusuarios": {"id": 19, "bbox": False},
     "malla_vial": {"id": 13, "bbox": True},
     "puentes": {"id": 14, "bbox": True},
+    "localidades": {"id": 48, "bbox": False},
 }
 
 
