@@ -24,6 +24,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1 # Electron solo hace falta para la app de escritorio
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/

@@ -1,67 +1,94 @@
 name: Publicar versión
 
-# Al subir un tag vX.Y.Z crea el release con el ejecutable portable para cada sistema.
+# Al subir un tag vX.Y.Z empaqueta la aplicación de escritorio para cada sistema y crea
+# el release con los archivos. En las ramas release/* solo empaqueta y prueba, para
+# detectar fallos antes de etiquetar.
 on:
   push:
     tags: ['v*']
+    branches: ['release/**']
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+            run: release/win-unpacked/ciclorrutas-bogota.exe
+          - os: macos-latest
+            target: --mac
+            run: release/mac-arm64/ciclorrutas-bogota.app/Contents/MacOS/ciclorrutas-bogota
+          - os: ubuntu-latest
+            target: --linux
+            run: xvfb-run -a release/linux-unpacked/ciclorrutas-bogota --no-sandbox
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache: false
       - run: npm ci
       - run: npm run build
-      - name: Compilar los ejecutables
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+      - name: Comprobar que la aplicación abre el visor
+        shell: bash
         run: |
-          cp -r dist portable/dist
-          mkdir salida
-          cd portable
-          build() {
-            GOOS=$1 GOARCH=$2 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "../salida/$3" .
-          }
-          build windows amd64 ciclorrutas-bogota-windows-x64.exe
-          build darwin arm64 ciclorrutas-bogota-macos-arm64
-          build darwin amd64 ciclorrutas-bogota-macos-intel
-          build linux amd64 ciclorrutas-bogota-linux-x64
-      - name: Probar el ejecutable de Linux
-        run: |
-          ./salida/ciclorrutas-bogota-linux-x64 -sin-navegador -puerto 8765 &
-          sleep 2
-          curl -fsS http://localhost:8765/ | grep -q '<div id="map">'
-          curl -fsSI http://localhost:8765/data/red.bin | grep -qi '^content-length'
+          ${{ matrix.run }} --remote-debugging-port=9333 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9333/json/list 2>/dev/null | grep -q 'app://ciclorrutas/'; then
+              echo "La ventana cargó el visor."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "La aplicación no abrió el visor." >&2
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+
+  release:
+    needs: app
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: apps
+          merge-multiple: true
       - name: Crear el release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > notas.md <<'NOTAS'
-          ## Ejecutable portable
+          ## Aplicación de escritorio
 
-          Descarga el archivo de tu sistema y ábrelo: levanta un servidor local y abre el visor en el navegador. No instala nada. Necesita internet para el relieve y los mapas base de IDECA.
+          Descarga el archivo de tu sistema y ábrelo: el visor aparece en su propia ventana, sin instalar nada más. Necesita internet para el relieve y los mapas base de IDECA.
 
-          | Sistema | Archivo |
-          | --- | --- |
-          | Windows 64 bits | `ciclorrutas-bogota-windows-x64.exe` |
-          | macOS Apple Silicon | `ciclorrutas-bogota-macos-arm64` |
-          | macOS Intel | `ciclorrutas-bogota-macos-intel` |
-          | Linux 64 bits | `ciclorrutas-bogota-linux-x64` |
+          | Sistema | Archivo | Cómo abrirlo |
+          | --- | --- | --- |
+          | Windows 64 bits | `…-win-x64.exe` | Doble clic. No se instala. |
+          | macOS Apple Silicon (M1 o posterior) | `…-mac-arm64.dmg` | Abre el archivo y arrastra la app a Aplicaciones. |
+          | macOS Intel | `…-mac-x64.dmg` | Igual que el anterior. |
+          | Linux 64 bits | `…-linux-x86_64.AppImage` | Dale permiso de ejecución y ábrelo. |
 
-          Los ejecutables no están firmados:
+          La aplicación no está firmada con un certificado de pago, así que el sistema pide confirmación la primera vez:
 
-          - **Windows**: en el aviso de SmartScreen, «Más información» → «Ejecutar de todas formas».
-          - **macOS y Linux**: en la terminal, `chmod +x` sobre el archivo y luego ejecútalo. En macOS, si el sistema lo bloquea, quítale la cuarentena con `xattr -d com.apple.quarantine <archivo>`.
+          - **Windows**: en el aviso azul de SmartScreen, «Más información» → «Ejecutar de todas formas».
+          - **macOS**: si dice que no se puede abrir, ve a Ajustes del Sistema → Privacidad y seguridad y pulsa «Abrir de todos modos».
 
-          También está en línea: https://diazrincon.github.io/bogota-ciclorutas/
+          También está en línea, sin descargar nada: https://diazrincon.github.io/bogota-ciclorutas/
           NOTAS
-          gh release create "$GITHUB_REF_NAME" salida/* --title "$GITHUB_REF_NAME" --notes-file notas.md --generate-notes
+          gh release create "$GITHUB_REF_NAME" apps/* --title "$GITHUB_REF_NAME" --notes-file notas.md --generate-notes
