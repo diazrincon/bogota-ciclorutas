@@ -27,9 +27,72 @@ body {
   color: #1c2530;
 }
 
+#panel header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 #panel h1 {
   margin: 0;
   font-size: 17px;
+}
+
+#panel-toggle {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -4px 0 -4px -6px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+#panel-toggle:hover {
+  background: rgba(20, 32, 44, 0.08);
+}
+
+#panel-toggle svg,
+.view-buttons svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Plegado: queda solo el botón; los errores se siguen mostrando. */
+#panel.collapsed {
+  width: auto;
+  max-width: 230px;
+  padding: 8px 10px;
+}
+
+#panel.collapsed #panel-toggle {
+  margin: -4px -6px;
+}
+
+#panel.collapsed h1,
+#panel.collapsed #panel-body,
+#panel.collapsed #status:not(.error) {
+  display: none;
+}
+
+.view-buttons button {
+  display: grid;
+  place-items: center;
+  color: #1c2530;
 }
 
 #status {

@@ -1,6 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
+import AREA from './data/ciclorrutas-bbox.json';
 import { DEM_PROTOCOL, demStatus, registerDemProtocol } from './dem-protocol.js';
 import { ProfilePanel } from './perfil.js';
 import { loadNetwork, nearestVertex } from './red.js';
@@ -117,13 +118,43 @@ const style = {
   },
 };
 
+// --- Vistas ------------------------------------------------------------------
+
+const AREA_BOUNDS = [
+  [AREA.west, AREA.south],
+  [AREA.east, AREA.north],
+];
+const DEFAULT_FOV = 36.87; // grados; el valor de MapLibre
+// Isométrica: cámara a 35,26° sobre el horizonte y con un campo de visión estrecho para
+// que casi no haya perspectiva (MapLibre no tiene cámara ortográfica). Se mira desde el
+// occidente, de frente al eje largo de la ciudad, con los cerros orientales al fondo.
+// Planta: primero con el norte a la izquierda (la ciudad queda apaisada y los cerros
+// arriba); un segundo clic la pone con el norte arriba.
+const PLAN_BEARING = 90;
+const ISOMETRIC = { pitch: 54.7, bearing: 105, fov: 12 };
+
+const panel = document.getElementById('panel');
+const profileRoot = document.getElementById('profile');
+
+// Margen para que el recuadro no quede debajo del panel ni del perfil.
+function viewPadding() {
+  const panelOpen = !panel.classList.contains('collapsed');
+  return {
+    top: 24,
+    right: 56,
+    bottom: profileRoot.hidden ? 24 : profileRoot.offsetHeight + 48,
+    left: panelOpen ? panel.offsetWidth + 24 : 24,
+  };
+}
+
+if (window.innerWidth < 700) panel.classList.add('collapsed');
+
 const map = new maplibregl.Map({
   container: 'map',
   style,
-  center: [-74.085, 4.66],
-  zoom: 11.3,
-  pitch: 58,
-  bearing: -12,
+  bounds: AREA_BOUNDS,
+  fitBoundsOptions: { padding: viewPadding(), bearing: PLAN_BEARING },
+  bearing: PLAN_BEARING,
   maxPitch: 80,
   minZoom: 8.5,
   maxBounds: [
@@ -133,6 +164,95 @@ const map = new maplibregl.Map({
 });
 
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+// Transición propia: MapLibre no anima el campo de visión, y cambiarlo durante un easeTo
+// con relieve activo se pierde a ratos (la animación trabaja sobre una copia de la cámara).
+let viewAnimation = 0;
+function showView(name) {
+  let view = ISOMETRIC;
+  if (name === 'planta') {
+    const alreadyThere = map.getPitch() < 1 && Math.abs(map.getBearing() - PLAN_BEARING) < 1;
+    view = { pitch: 0, bearing: alreadyThere ? 0 : PLAN_BEARING, fov: DEFAULT_FOV };
+  }
+  const target = map.cameraForBounds(AREA_BOUNDS, { padding: viewPadding(), bearing: view.bearing });
+  const from = {
+    lng: map.getCenter().lng,
+    lat: map.getCenter().lat,
+    zoom: map.getZoom(),
+    pitch: map.getPitch(),
+    bearing: map.getBearing(),
+    fov: map.getVerticalFieldOfView(),
+  };
+  const turn = ((view.bearing - from.bearing + 540) % 360) - 180; // por el lado corto
+  const duration = 1200;
+  const started = performance.now();
+  const mix = (a, b, t) => a + (b - a) * t;
+
+  cancelAnimationFrame(viewAnimation);
+  map.stop();
+  const step = () => {
+    const t = Math.min(1, (performance.now() - started) / duration);
+    const k = t * t * (3 - 2 * t);
+    map.jumpTo({
+      center: [mix(from.lng, target.center.lng, k), mix(from.lat, target.center.lat, k)],
+      zoom: mix(from.zoom, target.zoom, k),
+      pitch: mix(from.pitch, view.pitch, k),
+      bearing: from.bearing + turn * k,
+    });
+    map.setVerticalFieldOfView(mix(from.fov, view.fov, k));
+    if (t < 1) viewAnimation = requestAnimationFrame(step);
+  };
+  viewAnimation = requestAnimationFrame(step);
+}
+// Si el usuario mueve el mapa a mitad de la transición, manda el usuario.
+for (const type of ['mousedown', 'wheel', 'touchstart']) {
+  map.getCanvasContainer().addEventListener(type, () => cancelAnimationFrame(viewAnimation), { passive: true });
+}
+
+const VIEW_BUTTONS = [
+  {
+    view: 'planta',
+    title: 'Vista 2D de toda la red (otro clic: norte arriba)',
+    icon: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><rect x="9" y="9" width="6" height="6"/>',
+  },
+  {
+    view: 'isometrica',
+    title: 'Vista isométrica (resalta el relieve)',
+    icon: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+  },
+];
+
+map.addControl(
+  {
+    onAdd() {
+      this.container = document.createElement('div');
+      this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group view-buttons';
+      for (const { view, title, icon } of VIEW_BUTTONS) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.title = title;
+        button.setAttribute('aria-label', title);
+        button.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">${icon}</svg>`;
+        button.addEventListener('click', () => showView(view));
+        this.container.append(button);
+      }
+      return this.container;
+    },
+    onRemove() {
+      this.container.remove();
+    },
+  },
+  'top-right',
+);
+
+const panelToggle = document.getElementById('panel-toggle');
+const syncPanelToggle = () =>
+  panelToggle.setAttribute('aria-expanded', String(!panel.classList.contains('collapsed')));
+panelToggle.addEventListener('click', () => {
+  panel.classList.toggle('collapsed');
+  syncPanelToggle();
+});
+syncPanelToggle();
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
 // --- Panel -----------------------------------------------------------------
@@ -167,7 +287,7 @@ const hoverDot = document.createElement('div');
 hoverDot.className = 'hover-dot';
 const hoverMarker = new maplibregl.Marker({ element: hoverDot });
 
-const profile = new ProfilePanel(document.getElementById('profile'), {
+const profile = new ProfilePanel(profileRoot, {
   onHover: (lngLat) => {
     if (lngLat) hoverMarker.setLngLat(lngLat).addTo(map);
     else hoverMarker.remove();
