@@ -9,8 +9,15 @@
     <div id="map"></div>
 
     <aside id="panel">
-      <h1>Ciclorrutas de Bogotá</h1>
+      <header>
+        <button id="panel-toggle" type="button" aria-controls="panel-body" aria-label="Mostrar u ocultar las opciones" title="Opciones">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <h1>Ciclorrutas de Bogotá</h1>
+      </header>
       <p id="status" role="status">Cargando…</p>
+
+      <div id="panel-body">
 
       <fieldset>
         <legend>Mapa base</legend>
@@ -28,7 +35,24 @@
       <label><input id="toggle-hillshade" type="checkbox" checked /> Sombreado del relieve</label>
 
       <p class="hint">Arrastra con clic derecho (o Ctrl + arrastrar) para rotar e inclinar.</p>
+      </div>
     </aside>
+
+    <section id="profile" hidden>
+      <header>
+        <div class="modes" role="group" aria-label="Color del perfil">
+          <button type="button" data-mode="pendiente" aria-pressed="true">Pendiente</button>
+          <button type="button" data-mode="tipo" aria-pressed="false">Tipo de vía</button>
+        </div>
+        <strong data-summary></strong>
+        <div class="legend" data-legend></div>
+        <button type="button" class="clear" data-clear>Borrar ruta</button>
+      </header>
+      <div class="chart">
+        <canvas></canvas>
+        <output data-tooltip hidden></output>
+      </div>
+    </section>
 
     <script type="module" src="/src/main.js"></script>
   </body>
