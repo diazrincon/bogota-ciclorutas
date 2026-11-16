@@ -1,0 +1,67 @@
+name: Publicar versión
+
+# Al subir un tag vX.Y.Z crea el release con el ejecutable portable para cada sistema.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+      - run: npm ci
+      - run: npm run build
+      - name: Compilar los ejecutables
+        run: |
+          cp -r dist portable/dist
+          mkdir salida
+          cd portable
+          build() {
+            GOOS=$1 GOARCH=$2 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "../salida/$3" .
+          }
+          build windows amd64 ciclorrutas-bogota-windows-x64.exe
+          build darwin arm64 ciclorrutas-bogota-macos-arm64
+          build darwin amd64 ciclorrutas-bogota-macos-intel
+          build linux amd64 ciclorrutas-bogota-linux-x64
+      - name: Probar el ejecutable de Linux
+        run: |
+          ./salida/ciclorrutas-bogota-linux-x64 -sin-navegador -puerto 8765 &
+          sleep 2
+          curl -fsS http://localhost:8765/ | grep -q '<div id="map">'
+          curl -fsSI http://localhost:8765/data/red.bin | grep -qi '^content-length'
+      - name: Crear el release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notas.md <<'NOTAS'
+          ## Ejecutable portable
+
+          Descarga el archivo de tu sistema y ábrelo: levanta un servidor local y abre el visor en el navegador. No instala nada. Necesita internet para el relieve y los mapas base de IDECA.
+
+          | Sistema | Archivo |
+          | --- | --- |
+          | Windows 64 bits | `ciclorrutas-bogota-windows-x64.exe` |
+          | macOS Apple Silicon | `ciclorrutas-bogota-macos-arm64` |
+          | macOS Intel | `ciclorrutas-bogota-macos-intel` |
+          | Linux 64 bits | `ciclorrutas-bogota-linux-x64` |
+
+          Los ejecutables no están firmados:
+
+          - **Windows**: en el aviso de SmartScreen, «Más información» → «Ejecutar de todas formas».
+          - **macOS y Linux**: en la terminal, `chmod +x` sobre el archivo y luego ejecútalo. En macOS, si el sistema lo bloquea, quítale la cuarentena con `xattr -d com.apple.quarantine <archivo>`.
+
+          También está en línea: https://diazrincon.github.io/bogota-ciclorutas/
+          NOTAS
+          gh release create "$GITHUB_REF_NAME" salida/* --title "$GITHUB_REF_NAME" --notes-file notas.md --generate-notes
