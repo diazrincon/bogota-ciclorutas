@@ -8,6 +8,7 @@
 // acantilados en el borde del recuadro.
 
 import cicloBounds from './data/ciclorrutas-bbox.json';
+import { tileStore } from './tile-cache.js';
 
 const IDECA_EXPORT =
   'https://serviciosgis.catastrobogota.gov.co/image/rest/services/Imagenes/modelodigitalterreno2025funcion/ImageServer/exportImage';
@@ -26,6 +27,20 @@ export const DEM_PROTOCOL = 'ideca-dem';
 
 // Estado visible para la interfaz: si IDECA falla se sigue viendo relieve, pero menos detallado.
 export const demStatus = { idecaTiles: 0, idecaErrors: 0 };
+
+// Teselas ya convertidas, guardadas entre visitas. El terreno no cambia, así que no
+// caducan; solo hay un tope de cantidad.
+const stored = tileStore('ciclorrutas-relieve-v1', { maxEntries: 1200 });
+
+async function compress(rgba) {
+  const stream = new Blob([rgba]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Response(stream).blob();
+}
+
+async function decompress(blob) {
+  const stream = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8ClampedArray(await new Response(stream).arrayBuffer());
+}
 
 const cache = new Map(); // "z/x/y" -> Promise<Uint8ClampedArray> (RGBA terrarium)
 
@@ -115,9 +130,30 @@ function encodeTerrarium(rgba, i, height) {
   rgba[i * 4 + 3] = 255;
 }
 
+// Tesela desde el almacén persistente o, si no está, construida y guardada.
+async function loadTile(key, z, x, y) {
+  const saved = await stored.get(key);
+  if (saved) {
+    try {
+      const rgba = await decompress(saved.blob);
+      if (rgba.length === PIXELS * 4) return rgba;
+    } catch {
+      // Entrada dañada: se reconstruye.
+    }
+  }
+  const { rgba, complete } = await buildTile(z, x, y);
+  // Solo se guarda lo definitivo: si IDECA o el respaldo fallaron, se reintenta otro día.
+  if (complete && typeof CompressionStream !== 'undefined') {
+    compress(rgba).then((blob) => stored.put(key, blob), () => {});
+  }
+  return rgba;
+}
+
+// Devuelve { rgba, complete }; `complete` es false si faltó alguna de las fuentes.
 async function buildTile(z, x, y) {
   const bounds = tileBounds(z, x, y);
 
+  let complete = true;
   let ideca = null;
   if (intersectsIdecaArea(bounds)) {
     try {
@@ -125,6 +161,7 @@ async function buildTile(z, x, y) {
       demStatus.idecaTiles++;
     } catch (error) {
       demStatus.idecaErrors++;
+      complete = false;
       console.warn(`MDT de IDECA no disponible para ${z}/${x}/${y}:`, error);
     }
   }
@@ -132,10 +169,13 @@ async function buildTile(z, x, y) {
   if (ideca && ideca.count === PIXELS) {
     const rgba = new Uint8ClampedArray(PIXELS * 4);
     for (let i = 0; i < PIXELS; i++) encodeTerrarium(rgba, i, ideca.heights[i]);
-    return rgba;
+    return { rgba, complete };
   }
 
-  const fallback = await fetchFallback(z, x, y).catch(() => null);
+  const fallback = await fetchFallback(z, x, y).catch(() => {
+    complete = false;
+    return null;
+  });
   if (!ideca && !fallback) throw new Error(`Sin datos de elevación para ${z}/${x}/${y}`);
 
   const rgba = fallback ?? new Uint8ClampedArray(PIXELS * 4);
@@ -152,7 +192,7 @@ async function buildTile(z, x, y) {
       else if (!fallback) encodeTerrarium(rgba, i, floor);
     }
   }
-  return rgba;
+  return { rgba, complete };
 }
 
 function getTile(key, z, x, y) {
@@ -160,7 +200,7 @@ function getTile(key, z, x, y) {
   if (promise) {
     cache.delete(key); // se reinserta para mantener el orden de uso reciente
   } else {
-    promise = buildTile(z, x, y);
+    promise = loadTile(key, z, x, y);
     promise.catch(() => cache.delete(key));
   }
   cache.set(key, promise);
