@@ -1,7 +1,7 @@
 {
   "name": "bogota-ciclorutas",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Visor de las ciclorrutas de Bogotá sobre el relieve de la ciudad, con cálculo de rutas y perfil de elevación.",
   "license": "MIT",
   "author": "José Díaz Rincón",
