@@ -2,6 +2,8 @@
 // versión. Solo en la versión web publicada: en desarrollo estorbaría, y en la app de
 // escritorio los archivos ya están en el disco.
 
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
 const STORE = `ciclorrutas-app-${__APP_VERSION__}`;
 
 // Archivos que la página carga y que deben quedar disponibles sin conexión. Los de
@@ -19,7 +21,8 @@ function ownFiles() {
     'fonts/Open Sans Semibold/0-255.pbf',
     'fonts/Open Sans Semibold/256-511.pbf',
   ].map((path) => new URL(path, base).href);
-  return [base.href, ...fromDocument, ...data];
+  // El worker de MapLibre se carga desde el código, no desde el documento.
+  return [base.href, ...fromDocument, new URL(workerUrl, window.location.href).href, ...data];
 }
 
 export async function enableOffline() {

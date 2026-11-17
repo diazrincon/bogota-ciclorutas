@@ -1,4 +1,5 @@
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import AREA from './data/ciclorrutas-bbox.json';
@@ -10,6 +11,8 @@ import { ProfilePanel } from './perfil.js';
 import { loadNetwork, nearestVertex } from './red.js';
 import { findRoute } from './ruta.js';
 
+// Con empaquetador, MapLibre 6 necesita que se le indique dónde quedó su worker.
+maplibregl.setWorkerUrl(workerUrl);
 registerDemProtocol(maplibregl);
 registerBaseProtocol(maplibregl);
 
@@ -368,27 +371,6 @@ map.on('idle', refreshMarkers);
 map.on('sourcedata', (event) => {
   if (event.sourceId === 'terreno') refreshMarkers();
 });
-
-// Algo parecido pasa con los nombres de las vías. MapLibre los oculta donde el relieve
-// los tapa, comparando contra una imagen de profundidad del terreno que solo rehace
-// cuando la cámara cambia. Si el relieve termina de cargar después del último movimiento,
-// esa imagen queda vieja y, con la cámara inclinada, los nombres desaparecen. Al quedar
-// el mapa en reposo se marca como vieja y se pide un cuadro más (uno solo, para no
-// encadenar reposos). `terrainFacilitator` es interno de MapLibre 5: si cambia de nombre
-// esto deja de hacer efecto, sin romper nada.
-let depthRefreshed = false;
-map.on('idle', () => {
-  if (depthRefreshed) return;
-  depthRefreshed = true;
-  const facilitator = map.painter?.terrainFacilitator;
-  if (facilitator) facilitator.depthDirty = true;
-  map.triggerRepaint();
-});
-for (const type of ['move', 'sourcedata']) {
-  map.on(type, () => {
-    depthRefreshed = false;
-  });
-}
 
 for (const which of ['origin', 'destination']) {
   markers[which].on('dragend', () => {
