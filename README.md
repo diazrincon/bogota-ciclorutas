@@ -20,7 +20,7 @@ Hay tres formas:
 
 - **En línea**: <https://diazrincon.github.io/bogota-ciclorutas/>.
 - **Aplicación de escritorio**: en [Releases](https://github.com/diazrincon/bogota-ciclorutas/releases/latest) hay un archivo para Windows, macOS y Linux. Al abrirlo, el visor aparece en su propia ventana, sin navegador ni instalación adicional. Necesita internet para el relieve y los mapas base.
-- **Desde el código**, con Node.js 20 o superior:
+- **Desde el código**, con Node.js 24 o superior (el proyecto se compila y publica con la versión LTS actual, la 26; está en `.nvmrc`):
 
 ```bash
 npm install
@@ -52,7 +52,7 @@ El repositorio incluye los datos ya procesados, así que la aplicación funciona
 npm run data
 ```
 
-Solo requiere Python 3 (biblioteca estándar). Descarga unos 210 MB a `data/raw/`, que no se versiona, y tarda varios minutos. Los pasos son:
+Solo requiere Python 3.10 o superior (biblioteca estándar). Descarga unos 210 MB a `data/raw/`, que no se versiona, y tarda varios minutos. Los pasos son:
 
 | Script | Qué hace |
 | --- | --- |
