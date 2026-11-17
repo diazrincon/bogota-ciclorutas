@@ -6,11 +6,21 @@
 // aparte (ver etiquetas.js). Es más lento que la caché de IDECA (~1 s por tesela), así que
 // se usan teselas de 512 px: la cuarta parte de peticiones.
 
+import { loadThroughStore, tileStore } from './tile-cache.js';
+
 const SERVICES = 'https://serviciosgis.catastrobogota.gov.co/arcgis/rest/services/Mapa_Referencia';
 const SIZE = 512;
 const MERCATOR_HALF = 20037508.342789244;
 // Escala de una tesela de 256 px en el zoom 0 (96 ppp), la convención de ArcGIS.
 const SCALE_ZOOM_0 = 591657527.591555;
+
+// El híbrido es una foto aérea: en JPG pesa unas diez veces menos que en PNG.
+const FORMATS = { mapa_hibrido: 'jpg' };
+const DAY = 24 * 60 * 60 * 1000;
+// IDECA manda estas teselas con "max-age=0", así que el navegador no las conserva. Se
+// guardan aquí 30 días: el mapa base cambia poco, pero cambia.
+const tiles = tileStore('ciclorrutas-fondo-v1', { maxEntries: 1500, maxAge: 30 * DAY });
+const metadata = tileStore('ciclorrutas-fondo-capas-v1', { maxEntries: 20, maxAge: 7 * DAY });
 
 export const BASE_PROTOCOL = 'ideca-base';
 export const BASE_TILE_SIZE = SIZE;
@@ -20,12 +30,16 @@ const layerLists = new Map(); // servicio -> Promise<capas dibujables con su ran
 function loadLayers(service) {
   let promise = layerLists.get(service);
   if (!promise) {
-    promise = fetch(`${SERVICES}/${service}/MapServer?f=json`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`IDECA respondió ${response.status}`);
-        return response.json();
-      })
-      .then((info) => {
+    promise = loadThroughStore(metadata, service, async () => {
+      const response = await fetch(`${SERVICES}/${service}/MapServer?f=json`);
+      if (!response.ok) throw new Error(`IDECA respondió ${response.status}`);
+      const info = await response.json();
+      if (!Array.isArray(info.layers)) throw new Error('IDECA no devolvió la lista de capas');
+      return new Blob([JSON.stringify({ layers: info.layers })], { type: 'application/json' });
+    })
+      .then((blob) => blob.text())
+      .then((text) => {
+        const info = JSON.parse(text);
         const byId = new Map(info.layers.map((layer) => [layer.id, layer]));
         const drawable = [];
         for (const layer of info.layers) {
@@ -50,7 +64,11 @@ function loadLayers(service) {
   return promise;
 }
 
-async function fetchTile(service, z, x, y, signal) {
+function fetchTile(service, z, x, y, signal) {
+  return loadThroughStore(tiles, `${service}/${z}/${x}/${y}`, () => downloadTile(service, z, x, y, signal));
+}
+
+async function downloadTile(service, z, x, y, signal) {
   const layers = await loadLayers(service);
   const scale = SCALE_ZOOM_0 / 2 ** z / (SIZE / 256);
   const visible = layers.filter(
@@ -64,7 +82,7 @@ async function fetchTile(service, z, x, y, signal) {
     bboxSR: '3857',
     imageSR: '3857',
     size: `${SIZE},${SIZE}`,
-    format: 'png32',
+    format: FORMATS[service] ?? 'png32',
     transparent: 'false',
     dynamicLayers: JSON.stringify(
       visible.map(({ id }) => ({
@@ -79,7 +97,7 @@ async function fetchTile(service, z, x, y, signal) {
   if (!response.ok) throw new Error(`IDECA respondió ${response.status}`);
   const blob = await response.blob();
   if (!blob.type.startsWith('image/')) throw new Error('IDECA no devolvió una imagen');
-  return createImageBitmap(blob);
+  return blob;
 }
 
 export function registerBaseProtocol(maplibregl) {
@@ -87,6 +105,7 @@ export function registerBaseProtocol(maplibregl) {
     const match = request.url.match(/\/\/([\w-]+)\/(\d+)\/(\d+)\/(\d+)$/);
     if (!match) throw new Error(`URL de tesela inválida: ${request.url}`);
     const [service, z, x, y] = [match[1], Number(match[2]), Number(match[3]), Number(match[4])];
-    return { data: await fetchTile(service, z, x, y, abortController.signal) };
+    const blob = await fetchTile(service, z, x, y, abortController.signal);
+    return { data: await createImageBitmap(blob) };
   });
 }
