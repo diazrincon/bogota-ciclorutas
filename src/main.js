@@ -5,6 +5,7 @@ import AREA from './data/ciclorrutas-bbox.json';
 import { BASE_PROTOCOL, BASE_TILE_SIZE, registerBaseProtocol } from './base-protocol.js';
 import { DEM_PROTOCOL, demStatus, registerDemProtocol } from './dem-protocol.js';
 import { LABEL_LAYERS, labelLayers, labelSources, setLabelTheme } from './etiquetas.js';
+import { enableOffline } from './offline.js';
 import { ProfilePanel } from './perfil.js';
 import { loadNetwork, nearestVertex } from './red.js';
 import { findRoute } from './ruta.js';
@@ -447,6 +448,9 @@ document.getElementById('toggle-labels').addEventListener('change', (event) => {
 document.getElementById('toggle-hillshade').addEventListener('change', (event) => {
   map.setLayoutProperty('sombreado', 'visibility', event.target.checked ? 'visible' : 'none');
 });
+
+// Cuando el mapa ya cargó, para no competir con la primera carga.
+map.once('idle', enableOffline);
 
 // Útil para depurar desde la consola del navegador.
 window.map = map;
